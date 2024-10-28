@@ -25,10 +25,6 @@ const addressSchema = mongoose.Schema(
         },
         additionalInfo: {
             type: String
-        },
-        isDeliveryAddress: {
-            type: Boolean,
-            default: false
         }
     }, {timeStamps: true}
 )
