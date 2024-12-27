@@ -4,6 +4,7 @@ const express = require("express")
 const User = require("./models/eCommerce/users.model")
 const Product = require("./models/eCommerce/products.models")
 const Address = require("./models/eCommerce/address.models")
+const Category = require('./models/eCommerce/categories.models')
 const Order = require("./models/eCommerce/order.model")
 const jwt = require('jsonwebtoken')
 
@@ -33,6 +34,14 @@ app.listen(port, () => {
     console.log("Server is up and running on", port)
 })
 
+async function getAllCategories() {
+  try {
+    const allCategories = await Category.find()
+    return allCategories
+  } catch (error) {
+    console.log(error)
+  }
+}
 
 const updateWishlist = async (req, res) => {
     try {
@@ -276,6 +285,19 @@ app.get("/products", async (req, res) => {
         console.log(error)
         res.status(501).json({message: "Internal server error"})
     }
+})
+
+app.get("/categories", async (req, res) => {
+  try {
+    const categories = await getAllCategories()
+    if(categories.length !== 0){
+      res.send(categories)
+    } else {
+      res.status(404).json("Categories not found.")
+	}
+ } catch (error) {
+    res.status(500).json("Failed to fetch Categories.")
+  }
 })
 
 app.post("/users/updateWishlist/:userId", updateWishlist)
