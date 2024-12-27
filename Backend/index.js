@@ -7,14 +7,14 @@ const Address = require("./models/eCommerce/address.models")
 const Category = require('./models/eCommerce/categories.models')
 const Order = require("./models/eCommerce/order.model")
 const jwt = require('jsonwebtoken')
+require('dotenv').config()
 
 const SECRET_KEY = 'login_access_key'
 
 const cors = require("cors")
 const cookieParser = require("cookie-parser")
-const req = require("express/lib/request")
 
-const port = 3000
+const port = process.env.PORT
 
 const app = express()
 
