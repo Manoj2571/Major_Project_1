@@ -1,33 +1,37 @@
 const mongoose = require("mongoose")
 
-const addressSchema = mongoose.Schema(
-    {   
-        firstName : {
-            type: String,
-            required: true
-        },
-        lastName: {
-            type: String,
-            required: true
-        },
-        address: {
-            type: String,
-            required: true
-        },
-        email: {
-            type: String,
-            required: true
-        },
-        phone: {
-            default: 0,
-            type: Number,
-            required: true
-        },
-        additionalInfo: {
-            type: String
-        }
-    }, {timeStamps: true}
-)
+const addressSchema = mongoose.Schema({
+    user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    name: {
+        type: String,
+        required: true
+    },
+    mobile: {
+        type: Number,
+        required: true
+    },
+    pincode: {
+        type: Number,
+        required: true
+    },
+    city: {
+        type: String,
+        required: true
+    },
+    state: {
+        type: String,
+        required: true
+    },
+    address: {
+        type: String,
+        required: true
+    }
+}, {timeStamps: true})
+
 
 const Address = mongoose.model("Address", addressSchema)
 

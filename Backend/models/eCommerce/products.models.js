@@ -7,6 +7,10 @@ const productSchema = mongoose.Schema(
       required: true
     },
     price: {
+      type: Number,
+      required: true
+    },
+    description: {
       type: String,
       required: true
     },
@@ -25,18 +29,28 @@ const productSchema = mongoose.Schema(
       max: 5,
       default: 0
     },
-    isWishlisted: {
-      type: Number,
-      default: 0
-    },
-    inCart: {
-      type: Number,
-      default: 0
-    },
     category: {
       type: String,
       required: true
     },
+    sizeAvailability: [
+      {
+        size: {
+          type: String,
+          enum: ["S", "M", "L", "XL"],
+          required: true
+        },
+        quantity: {
+          type: Number,
+          required: true,
+          min: 0
+        },
+        isAvailable: {
+          type: Boolean,
+          default: true
+        }
+      }
+    ],
     tags: [{
       type: String
     }]

@@ -1,134 +1,294 @@
-const { initializeDatabase } = require('./db/db.connect')
-const express = require('express')
-const Product = require('./models/eCommerce/products.models')
-const Category = require('./models/eCommerce/categories.models')
+const mongoose = require("mongoose")
+const {initializeDatabase} = require("./db/db.connect")
+const express = require("express")
+const User = require("./models/eCommerce/users.model")
+const Product = require("./models/eCommerce/products.models")
 const Address = require("./models/eCommerce/address.models")
+const Order = require("./models/eCommerce/order.model")
+const jwt = require('jsonwebtoken')
+
+const SECRET_KEY = 'login_access_key'
+
+const cors = require("cors")
+const cookieParser = require("cookie-parser")
+const req = require("express/lib/request")
+
+const port = 3000
+
 const app = express()
-const cors = require("cors");
-require('dotenv').config()
 
 const corsOptions = {
-  origin: "*",
-  credentials: true,
-  optionSuccessStatus: 200,
-};
+    origin: '*',
+    credentials: true,
+    optionsSuccessStatus: 200
+}
 
-app.use(cors(corsOptions));
-
+app.use(cors(corsOptions))
 app.use(express.json())
+app.use(cookieParser())
 
 initializeDatabase()
 
-const port = process.env.PORT
-
 app.listen(port, () => {
-  console.log("Server is running on port number", port)
+    console.log("Server is up and running on", port)
 })
 
-app.get("/categories", async (req, res) => {
-  try {
-    const categories = await getAllCategories()
-    if(categories.length !== 0){
-      res.send(categories)
-    } else {
-      res.status(404).json("Categories not found.")
+
+const updateWishlist = async (req, res) => {
+    try {
+        const {product} = req.body
+        const user = await User.findById(req.params.userId)
+
+        const productIndex =  user.wishlist.findIndex(existingProduct => existingProduct == product)
+
+        if(productIndex == -1) {
+            user.wishlist = [...user.wishlist, product]
+        } else {
+            user.wishlist = user.wishlist.filter(existingProduct => existingProduct != product)
+        }
+
+        await user.save()
+
+        return res.status(201).json({message: "User updated successfully.", wishlist: user.wishlist})
+    } catch (error) {
+        console.log(error)
+        return res.status(500).json({message: "Error occured while updating wishlist."})
     }
+}
+
+
+const updateLoggedInUserData = async (req,res) => {
+
+    try {
+    const user = await User.findById(req.userId)
+
+   
+    req.body.cart.forEach( (product) => {
+        const productIndex =  user.cart.findIndex(existingProduct => existingProduct.product == product.product && existingProduct.size == product.size)
+
+        if(productIndex == -1) {
+            user.cart = [...user.cart, product]
+        } else {
+            user.cart[productIndex].quantity += product.quantity
+        }
+    })
+
+    req.body.wishlist.forEach( (product) => {
+        const productIndex =  user.wishlist.findIndex(existingProduct => existingProduct == product)
+
+        if(productIndex == -1) {
+            user.wishlist = [...user.wishlist, product]
+        }
+    })
+
+    await user.save()
+
+    return res.status(201).json({message: "User updated successfully.", user})
+
+    
+} catch (error) {
+    console.log(error)
+    return res.status(500).json({message: "Error occured while updating user."})
+}
+
+}
+
+const addToCart = async (req, res) => {
+    try {
+    const {product, quantity, size} = req.body
+    const user = await User.findById(req.params.userId)
+
+    const productIndex =  user.cart.findIndex(existingProduct => existingProduct.product == product && existingProduct.size == size)
+
+        if(productIndex == -1) {
+            user.cart = [...user.cart, req.body]
+        } else {
+            user.cart[productIndex].quantity += quantity
+        }
+
+    await user.save()
+
+    return res.status(201).json({message: "User updated successfully.", cart: user.cart})
+
+    } catch (error) {
+        console.log(error)
+       return res.status(500).json({message: "Error occured while adding product to cart."})
+    }
+    
+    
+
+}
+
+const removeFromCart = async (req, res) => {
+
+    try { 
+    const {product, size} = req.body
+
+    const user = await User.findById(req.params.userId)
+    user.cart =  user.cart.filter(cartItem => !(cartItem.product == product && cartItem.size == size))
+
+    await user.save()
+
+    return res.status(201).json({message: "Product removed from Cart", cart: user.cart})
+
+    }catch (error) {
+        console.log(error)
+       return res.status(500).json({message: "Error occured while removing product from cart."})
+    }
+}
+
+const quantityIncrement = async (req, res) => {
+    try {
+
+        const user = await User.findById(req.params.userId)
+
+        const itemIndex = user.cart.findIndex(
+            (item) =>
+              item.product == req.body.product &&
+              item.size == req.body.size
+          );
+
+        user.cart[itemIndex].quantity += 1  
+
+        await user.save()
+
+        return res.status(201).json({message: "Quantity Incremented Successfully.", cart: user.cart})
+
+
+    } catch (error) {
+        return res.status(500).json({message: "Error occured while incrementing quantity."})
+    }
+}
+
+const quantityDecrement = async (req, res) => {
+    try {
+
+        const user = await User.findById(req.params.userId)
+
+        const itemIndex = user.cart.findIndex(
+            (item) =>
+              item.product == req.body.product &&
+              item.size == req.body.size
+          );
+
+          if (user.cart[itemIndex].quantity != 1) {
+            user.cart[itemIndex].quantity -= 1;
+          }
+
+        await user.save()
+
+        return res.status(201).json({message: "Quantity Decremented Successfully.", cart: user.cart})
+
+
+    } catch (error) {
+        console.log(error)
+        return res.status(500).json({message: "Error occured while incrementing quantity."})
+    }
+}
+
+const moveToWishlist = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+
+    const productIndex = user.wishlist.findIndex(product => product == req.body.product)
+
+    if(productIndex == -1) {
+      user.wishlist = [...user.wishlist, req.body.product]
+    }
+
+    user.cart = await user.cart.filter(cartItem => !(cartItem.product == req.body.product && cartItem.size == req.body.size))
+
+    await user.save()
+
+    return res.status(201).json({message: "Product moved to wishlist", wishlist: user.wishlist})
+
   } catch (error) {
-    res.status(500).json("Failed to fetch Categories.")
+    return res.status(500).json({message: "Error occured while moving product to wishlist."})
   }
+}
+
+const productDecrement = async (productData) => {
+    const product = await Product.findById(productData.product)
+
+    const sizeIndex = product.sizeAvailability.findIndex((size) => size.size == productData.size)
+
+    product.sizeAvailability[sizeIndex].quantity -= productData.quantity
+
+    await product.save()
+
+}
+
+const bulkUpdateProducts = async (req, res) => {
+
+    const {cart} = req.body
+    
+    try {
+        await Promise.all(cart.map(cartProduct => productDecrement(cartProduct)))
+        res.status(200).json({ message: 'All products decremented successfully!' });
+        
+    } catch (error) {
+        console.log(error)
+        res.status(500).json("Internal server error")
+    }
+}
+
+const verifyToken = (req, res, next) => {
+
+    const token = req.headers['authorization']?.split(' ')[1]
+
+    if (!token) {
+        return res.status(401).json({ message: 'No token provided' });
+    }
+
+     jwt.verify(token, SECRET_KEY, (err, decoded) => {
+        if (err) {
+            return res.status(403).json({ message: 'Invalid token' });
+        }
+        req.userId = decoded.userId
+        
+        next();
+    });
+};
+
+app.get("/", async (req, res) => {
+    res.send("Hello!")
 })
 
-app.get("/categories/:categoryName", async (req, res) => {
-  try {
-    const productTypes = await findProductTypesByCategory(req.params.categoryName)
-    if(productTypes.length != 0) {
-      res.send(productTypes)
-    } else {
-      res.status(404).json("Product types not found.")
-    }
-  } catch (error) {
-    res.status(500).json("Failed to fetch product types")
-  }
-})
+app.get("/users", async (req, res) => {
+    try {
+        const users = await User.find().select("-password")
 
-app.get("/products/:categoryName", async (req, res) => {
-  try {
-    const products = await findProductsByCategory(req.params.categoryName)
-    if(products.length != 0) {
-      res.send(products)
-    } else {
-      res.status(404).json("No Products Found.")
+        res.send(users)
+
+    } catch (error) {
+        console.log(error)
+        res.status(501).json({message: "Internal server error"})
     }
-  } catch (error) {
-    res.status(500).json("Failed to get products")
-  }
 })
 
 app.get("/products", async (req, res) => {
-  try {
-    const products = await getAllProducts()
-    if(products.length !== 0) {
-      res.send(products)
-    } else {
-      res.status(404).json("Products not found.")
-    }
-  } catch (error) {
-    res.status(500).json("Failed to fetch Products.")
-  }
-})
+    try {
+        const products = await Product.find()
 
-app.get("/products/:productId", async (req, res) => {
-  try {
-    const product = await getRequiredProduct(req.params.productId)
-    product.length == 0 ? res.send(product) : res.status(404).json("Product not found.")
-  } catch (error) {
-    res.status(500).json("Failed to fetch required product.")
-  }
-})
+        res.send(products)
 
-app.post("/categories", async (req, res) => {
-  try {
-    const savedCategory = await addNewCategory(req.body)
-    res.status(201).json({message: "Category added successfully", category: savedCategory})
-  } catch (error) {
-    res.status(500).json("Failed to post category.")
-  } 
-})
-
-app.post("/products", async (req, res) => {
-  try {
-    const savedProduct = await addNewProduct(req.body)
-    res.status(201).json({message: "Product added successfully", product: savedProduct})
     } catch (error) {
-      res.status(500).json("Failed to add product.")
+        console.log(error)
+        res.status(501).json({message: "Internal server error"})
     }
 })
 
-app.post("/products/wishlist/:productId", async (req, res) => {
-  try {
-    const updatedProduct = await updatedIsWishlisted(req.params.productId, req.body)
-    if(updatedProduct.length != 0) {
-      res.status(201).json({message: "Product Updated Successfully.", product: updatedProduct})
-    } else {
-      res.status(404).json({message: "Product not found."})
-    }
-  } catch (error) {
-    res.status(500).json({message: "Failed to update product."})
-  }
-})
+app.post("/users/updateWishlist/:userId", updateWishlist)
 
-app.post("/products/cart/:productId", async (req, res) => {
-  try {
-    const updatedProduct = await updatedInCart(req.params.productId, req.body)
-    if(updatedProduct.length != 0) {
-      res.status(201).json({message: "Product Updated Successfully.", product: updatedProduct})
-    } else {
-      res.status(404).json({message: "Product not found."})
-    }
-  } catch (error) {
-    res.status(500).json({message: "Failed to update product."})
-  }
-})
+app.post("/users/addToCart/:userId", addToCart)
+
+app.post("/users/removeFromCart/:userId", removeFromCart)
+
+app.post("/users/incrementQuantity/:userId", quantityIncrement)
+
+app.post("/users/decrementQuantity/:userId", quantityDecrement)
+
+app.post("/users/moveToWishlist/:userId", moveToWishlist)
 
 app.post("/addresses", async (req, res) => {
     try {
@@ -152,9 +312,19 @@ app.get("/addresses", async (req, res) => {
     }
 })
 
-app.delete("/addresses/:id", async (req, res) => {
+app.get("/addresses/:userId", async (req, res) => {
     try {
-        const deletedAddress = await Address.findByIdAndDelete(req.params.id)
+        const addresses = await Address.find({user: req.params.userId})
+            res.send(addresses)
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({message: "fetching addresses failed.", error: error})
+    }
+})
+
+app.delete("/addresses/delete/:addressId", async (req, res) => {
+    try {
+        const deletedAddress = await Address.findByIdAndDelete(req.params.addressId)
 
         if(!deletedAddress) {
             return res.status(404).json({error: "Address not found."})
@@ -170,85 +340,106 @@ app.delete("/addresses/:id", async (req, res) => {
     }
 })
 
-async function getAllCategories() {
-  try {
-    const allCategories = await Category.find()
-    return allCategories
-  } catch (error) {
-    console.log(error)
-  }
-}
+app.post("/addresses/update/:addressId", async (req, res) => {
+    try {
+        const updatedAddress = await Address.findByIdAndUpdate(req.params.addressId, req.body, {new: true})
+        
+        res.status(201).json({message: "Address updated successfully.", address: updatedAddress})
 
-async function getAllProducts() {
-  try {
-    const allProducts = await Product.find()
-    return allProducts
-  } catch (error) {
-    console.log(error)
-  }
-}
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({message: "Internal server error", error: error})
+    }
+})
 
-async function addNewCategory(newCategory) {
-  try {
-    const category = new Category(newCategory)
-    const savedCategory = await category.save()
-    return savedCategory
-  } catch (error) {
-    console.log(error)
-  }
-}
+app.get("/orders", async (req, res) => {
+    try {
+        const orders = await Order.find().populate({path: 'cart', populate: {path: 'product', select: 'name price imageUrl'}})
+        res.send(orders)
+    } catch(error) {
+        console.log(error)
+        res.status(500).json({message: "fetching orders failed.", error: error})
+    }
+})
 
-async function addNewProduct(newProduct) {
-  try {
-    const product = new Product(newProduct)
-    const savedProduct = await product.save()
-    return savedProduct
-  } catch (error) {
-    console.log(error)
-  }
-}
+app.post("/orders/addOrder", async (req, res) => {
+    try {
+        const newOrder = new Order(req.body)
+        const savedOrder = await newOrder.save()
+        res.status(201).json({message: "Order added successfully", order: savedOrder})
+    } catch(error) {
+        console.log(error)
+        res.status(500).json("Internal server error")
+    }
+})
 
-async function findProductsByCategory(categoryName) {
-  try {
-    const products = await Product.find({category: categoryName})
-    return products
-  } catch (error) {
-    console.log(error)
-  }
-}
+app.post("/products/productStockDecrement", bulkUpdateProducts)
 
-async function findProductTypesByCategory(categoryName) {
-  try {
-    const productTypes = await Category.find({category: categoryName}, 'subCategory')
-    return productTypes
-  } catch (error) {
-    console.log(error)
-  }
-}
 
-async function updatedIsWishlisted(productId, updatedData) {
-  try {
-    const updatedProduct = Product.findByIdAndUpdate(productId, updatedData, {new: true})
-    return updatedProduct
-  } catch (error) {
-    console.log(error)
-  }
-}
+app.post("/users/addUser", async (req, res) => {
+    try {
+        const newUser = new User(req.body)
+        const savedUser = await newUser.save()
 
-async function updatedInCart(productId, updatedData) {
-  try {
-    const updatedProduct = Product.findByIdAndUpdate(productId, updatedData, {new: true})
-    return updatedProduct
-  } catch (error) {
-    console.log(error)
-  }
-}
+        res.status(201).json({message: "User added successfully", user: savedUser})
 
-async function getRequiredProduct(productId) {
-  try {
-    const requiredProduct = Product.findById(productId)
-    return requiredProduct
-  } catch (error) {
-    console.log(error)
-  }
-}
+    } catch (error) {
+        console.log(error)
+        res.status(500).json("Internal server error")
+    }
+})
+
+app.post('/login', async (req, res) => {
+
+    const {email, password, rememberMe} = req.body
+
+
+    const user = await User.findOne({email})
+
+    if (!user) {
+        return res.status(400).json({ message: "Account Doesn't exits" });
+    }
+
+
+    const isMatch = user.password === password
+    if (!isMatch) {
+        return res.status(400).json({ message: 'Wrong Password' });
+    }
+
+
+    const payload = {userId: user._id}
+
+    const tokenOptions = rememberMe ? {expiresIn: '7d'} : {expiresIn: '15m'}
+
+    const token = jwt.sign(payload, SECRET_KEY, tokenOptions)
+
+    return res.status(200).json({ message: 'Login successful', token });
+}) 
+
+app.post("/users/loggedIn", verifyToken, updateLoggedInUserData)
+
+app.post("/users/updateUser/:userId", async (req, res) => {
+    try {
+        const updatedUser = await User.findByIdAndUpdate(req.params.userId, req.body, {new: true})
+
+        res.status(201).json({message: "User updated successfully", user:updatedUser})
+    } catch (error) {
+        res.status(500).json({message: "Internal server Error"})
+    }
+})
+
+app.post("/users/clearCart", async (req, res) => {
+    try {
+        const user = await User.findById(req.body.userId)
+        user.cart = []
+        await user.save()
+        res.status(201).json({message: "Cart updated successfully"})
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({message: "Internal server error."})
+    }
+})
+
+
+
+
